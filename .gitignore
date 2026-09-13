@@ -1,5 +1,6 @@
 *.iml
 .gradle/
+.kotlin/
 .idea/
 local.properties
 build/
@@ -8,15 +9,7 @@ captures/
 .externalNativeBuild/
 .cxx/
 .DS_Store
-node_modules/
-dist/
-dist-ssr/
-.vite/
-coverage/
 *.local
-*.tsbuildinfo
-docs/*.pdf
 
-# UI 참고 자료 (로컬 전용)
-.uiref/
+# 디자인/기획 참고 자료 (로컬 전용)
 *.zip
