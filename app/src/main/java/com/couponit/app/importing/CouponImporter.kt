@@ -9,6 +9,9 @@ import com.couponit.app.data.local.ImageAssetEntity
 import com.couponit.app.domain.Coupon
 import com.couponit.app.domain.CouponType
 import com.couponit.app.recognition.BarcodeRecognizer
+import com.couponit.app.recognition.CouponTextFields
+import com.couponit.app.recognition.CouponTextRecognizer
+import kotlinx.coroutines.CancellationException
 import java.io.File
 import java.security.MessageDigest
 import java.util.UUID
@@ -19,13 +22,16 @@ object ImportPolicy {
         "asset-$assetId.${if (mime == "image/png") "png" else "jpg"}"
 }
 
-data class ImportResult(val couponId: String?, val error: String?)
+data class ImportResult(val couponId: String?, val error: String?, val textRecognitionFailed: Boolean = false)
 
 class CouponImporter(
     private val context: Context,
     private val repository: CouponRepository,
     private val recognizer: BarcodeRecognizer,
+    private val textRecognizer: CouponTextRecognizer = CouponTextRecognizer(context),
 ) {
+    suspend fun recognizeText(path: String): CouponTextFields = textRecognizer.recognize(File(path))
+
     suspend fun import(uri: Uri): ImportResult {
         val resolver = context.contentResolver
         val mime = resolver.getType(uri)
@@ -54,7 +60,8 @@ class CouponImporter(
                 digest.digest().joinToString("") { "%02x".format(it) }
             }
 
-            repository.save(Coupon(couponId, "정보 확인 필요", null, type = CouponType.UNKNOWN, needsReview = true, originalAssetPath = destination.path))
+            var coupon = Coupon(couponId, "정보 확인 필요", null, type = CouponType.UNKNOWN, needsReview = true, originalAssetPath = destination.path)
+            repository.save(coupon)
             repository.saveAsset(ImageAssetEntity(assetId, couponId, "ORIGINAL", destination.path, sha256, mime, bounds.outWidth, bounds.outHeight, destination.length()))
 
             val codes = recognizer.recognize(destination)
@@ -66,9 +73,28 @@ class CouponImporter(
                 )
             })
             if (codes.size == 1) {
-                repository.save(Coupon(couponId, "정보 확인 필요", null, type = CouponType.EXCHANGE, needsReview = true, originalAssetPath = destination.path, codeValue = codes.first().rawValue, codeFormat = codes.first().format))
+                coupon = coupon.copy(type = CouponType.EXCHANGE, codeValue = codes.first().rawValue, codeFormat = codes.first().format)
+                repository.save(coupon)
             }
-            ImportResult(couponId, null)
+            var textRecognitionFailed = false
+            val fields = try {
+                recognizeText(destination.path)
+            } catch (error: CancellationException) {
+                throw error
+            } catch (_: Exception) {
+                textRecognitionFailed = true
+                CouponTextFields()
+            }
+            repository.save(coupon.copy(
+                title = fields.title ?: coupon.title,
+                merchantName = fields.merchantName,
+                expiryDate = fields.expiryDate,
+                expiryConfirmed = fields.expiryConfirmed,
+                needsReview = fields.title == null || fields.merchantName == null || !fields.expiryConfirmed || coupon.codeValue == null,
+            ))
+            ImportResult(couponId, null, textRecognitionFailed)
+        } catch (error: CancellationException) {
+            throw error
         } catch (error: Exception) {
             destination.delete()
             ImportResult(null, error.message ?: "이미지를 저장하지 못했어요.")

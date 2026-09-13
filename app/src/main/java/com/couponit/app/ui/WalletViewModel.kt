@@ -13,6 +13,8 @@ import com.couponit.app.domain.UsageEventType
 import com.couponit.app.domain.WalletRules
 import com.couponit.app.domain.WalletSummary
 import com.couponit.app.importing.CouponImporter
+import com.couponit.app.recognition.CouponTextFields
+import kotlinx.coroutines.CancellationException
 import java.time.LocalDate
 import java.util.UUID
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -89,19 +91,38 @@ class WalletViewModel(
     fun import(uris: List<Uri>) = viewModelScope.launch {
         if (uris.isEmpty()) return@launch
         importing.value = true
-        val results = uris.take(30).map { importer.import(it) }
-        importing.value = false
+        val results = try { uris.take(30).map { importer.import(it) } } finally { importing.value = false }
         val saved = results.count { it.couponId != null }
         val failed = results.size - saved
         message.value = if (failed == 0) "쿠폰 ${saved}개를 저장했어요. 정보를 확인해 주세요." else "${saved}개 저장, ${failed}개는 추가하지 못했어요."
+        if (results.any { it.textRecognitionFailed }) message.value += " 글자 인식에 실패한 쿠폰은 상세에서 다시 인식해 주세요."
+    }
+
+    suspend fun recognizeDetails(coupon: Coupon): CouponTextFields? {
+        val path = coupon.originalAssetPath ?: return null
+        return try {
+            importer.recognizeText(path).also {
+                message.value = if (it == CouponTextFields()) "인식 가능한 정보를 찾지 못했어요. 원본을 보고 직접 입력해 주세요."
+                else "빈 항목에 인식 결과를 채웠어요. 원본과 비교한 뒤 저장해 주세요."
+            }
+        } catch (error: CancellationException) {
+            throw error
+        } catch (_: Exception) {
+            message.value = "글자를 인식하지 못했어요. 다시 시도하거나 직접 입력해 주세요."
+            null
+        }
     }
 
     fun saveDetails(coupon: Coupon, title: String, merchantName: String, expiry: String, type: CouponType) = viewModelScope.launch {
-        val parsed = runCatching { LocalDate.parse(expiry) }.getOrNull()
+        val parsed = runCatching { LocalDate.parse(expiry.trim()) }.getOrNull()
+        if (expiry.isNotBlank() && parsed == null) {
+            message.value = "종료일을 YYYY-MM-DD 형식의 올바른 날짜로 입력해 주세요."
+            return@launch
+        }
         repository.save(coupon.copy(
             title = title.ifBlank { "이름 미확인" }, merchantName = merchantName.ifBlank { null }, type = type,
             expiryDate = parsed, expiryConfirmed = parsed != null,
-            needsReview = title.isBlank() || merchantName.isBlank() || (coupon.codeValue == null),
+            needsReview = title.isBlank() || merchantName.isBlank() || parsed == null || (coupon.codeValue == null),
         ))
         message.value = "쿠폰 정보를 저장했어요."
         screen.value = WalletScreen.Home

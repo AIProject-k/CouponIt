@@ -58,6 +58,7 @@ import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -88,6 +89,7 @@ import com.couponit.app.ui.theme.Rule
 import com.couponit.app.ui.theme.Warning
 import java.time.LocalDate
 import java.time.temporal.ChronoUnit
+import kotlinx.coroutines.launch
 
 @Composable
 fun CouponItApp(model: WalletViewModel, onPickImages: () -> Unit) {
@@ -180,14 +182,14 @@ private fun CouponCard(coupon: Coupon, model: WalletViewModel, grid: Boolean) {
     Card(colors = CardDefaults.cardColors(containerColor = Card), border = androidx.compose.foundation.BorderStroke(1.dp, Rule), shape = RoundedCornerShape(6.dp)) {
         if (grid) {
             Column {
-                Box(Modifier.fillMaxWidth().height(74.dp).background(typeColor(coupon.type)), contentAlignment = Alignment.Center) {
-                    Text(coupon.merchantName?.take(1) ?: "?", fontSize = 30.sp, fontWeight = FontWeight.Bold, color = Navy.copy(alpha = .55f))
-                }
+                OriginalImage(coupon.originalAssetPath, null, Modifier.fillMaxWidth().height(150.dp).background(Color.White)
+                    .clickable { model.open(WalletScreen.Present(coupon.id)) })
                 CouponInfo(coupon, Modifier.clickable { model.open(WalletScreen.Detail(coupon.id)) }.padding(10.dp))
                 PresentButton(coupon, model, Modifier.fillMaxWidth().padding(8.dp))
             }
         } else Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-            Box(Modifier.padding(10.dp).size(48.dp).background(typeColor(coupon.type), RoundedCornerShape(4.dp)), contentAlignment = Alignment.Center) { Text(coupon.merchantName?.take(1) ?: "?", fontWeight = FontWeight.Bold) }
+            OriginalImage(coupon.originalAssetPath, null, Modifier.padding(10.dp).size(72.dp)
+                .clickable { model.open(WalletScreen.Present(coupon.id)) })
             CouponInfo(coupon, Modifier.weight(1f).clickable { model.open(WalletScreen.Detail(coupon.id)) }.padding(vertical = 10.dp))
             PresentButton(coupon, model, Modifier.fillMaxHeight().width(76.dp).padding(6.dp))
         }
@@ -206,7 +208,7 @@ private fun CouponInfo(coupon: Coupon, modifier: Modifier) {
 @Composable
 private fun PresentButton(coupon: Coupon, model: WalletViewModel, modifier: Modifier) {
     Button(onClick = { if (coupon.originalAssetPath != null) model.open(WalletScreen.Present(coupon.id)) else model.open(WalletScreen.Detail(coupon.id)) }, modifier = modifier, shape = RoundedCornerShape(5.dp), contentPadding = PaddingValues(6.dp)) {
-        Text(if (coupon.codeValue != null) "바코드" else "원본", fontSize = 12.sp)
+        Text(if (coupon.codeValue != null) "원본·바코드" else "원본", fontSize = 12.sp)
     }
 }
 
@@ -216,6 +218,8 @@ private fun DetailScreen(coupon: Coupon, model: WalletViewModel) {
     var merchant by remember(coupon.id) { mutableStateOf(coupon.merchantName.orEmpty()) }
     var expiry by remember(coupon.id) { mutableStateOf(coupon.expiryDate?.toString().orEmpty()) }
     var type by remember(coupon.id) { mutableStateOf(coupon.type) }
+    var recognizing by remember(coupon.id) { mutableStateOf(false) }
+    val scope = rememberCoroutineScope()
     Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(16.dp)) {
         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
             OutlinedButton({ model.open(WalletScreen.Home) }) { Text("← 지갑") }
@@ -223,13 +227,28 @@ private fun DetailScreen(coupon: Coupon, model: WalletViewModel) {
         }
         Spacer(Modifier.height(16.dp))
         OriginalImage(coupon.originalAssetPath, null, Modifier.fillMaxWidth().height(230.dp))
+        OutlinedButton({
+            recognizing = true
+            scope.launch {
+                try {
+                    model.recognizeDetails(coupon)?.let { fields ->
+                        if (title.isBlank() || title == "이름 미확인") title = fields.title.orEmpty()
+                        if (merchant.isBlank()) merchant = fields.merchantName.orEmpty()
+                        if (expiry.isBlank()) expiry = fields.expiryDate?.toString().orEmpty()
+                    }
+                } finally { recognizing = false }
+            }
+        }, Modifier.fillMaxWidth(), enabled = !recognizing && coupon.originalAssetPath != null) {
+            Text(if (recognizing) "글자 인식 중…" else "이미지에서 정보 다시 인식")
+        }
+        Text("재인식은 빈 항목만 채웁니다. 원본과 비교한 뒤 저장해 주세요.", color = Muted, fontSize = 11.sp)
         Spacer(Modifier.height(12.dp))
         OutlinedTextField(title, { title = it }, Modifier.fillMaxWidth(), label = { Text("상품명") }, singleLine = true)
         OutlinedTextField(merchant, { merchant = it }, Modifier.fillMaxWidth(), label = { Text("사용처") }, singleLine = true)
         OutlinedTextField(expiry, { expiry = it }, Modifier.fillMaxWidth(), label = { Text("사용 기간 종료 (YYYY-MM-DD)") }, singleLine = true)
         LazyRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) { items(CouponType.entries) { value -> FilterChip(type == value, { type = value }, { Text(typeLabel(value)) }) } }
-        Button({ model.saveDetails(coupon, title, merchant, expiry, type) }, Modifier.fillMaxWidth()) { Text("정보 저장") }
-        Button({ model.open(WalletScreen.Present(coupon.id)) }, Modifier.fillMaxWidth(), enabled = coupon.originalAssetPath != null) { Text(if (coupon.codeValue != null) "바코드 크게 보기" else "원본 크게 보기") }
+        Button({ model.saveDetails(coupon, title, merchant, expiry, type) }, Modifier.fillMaxWidth(), enabled = !recognizing) { Text("정보 저장") }
+        Button({ model.open(WalletScreen.Present(coupon.id)) }, Modifier.fillMaxWidth(), enabled = coupon.originalAssetPath != null) { Text(if (coupon.codeValue != null) "원본·바코드 크게 보기" else "원본 크게 보기") }
         if (coupon.type == CouponType.AMOUNT) AmountControls(coupon, model)
         else Button({ model.markRedeemed(coupon.id) }, Modifier.fillMaxWidth()) { Text("사용했어요") }
         Text("코드를 열어 본 사실과 실제 사용 기록은 별도로 저장됩니다.", color = Muted, fontSize = 11.sp)
@@ -265,8 +284,13 @@ private fun PresentScreen(coupon: Coupon, code: CodeCandidateEntity?, model: Wal
             Text(coupon.merchantName ?: "사용처 미확인", color = Muted)
         }
         Spacer(Modifier.height(18.dp)); Text(coupon.title, fontWeight = FontWeight.Bold, fontSize = 18.sp)
-        Box(Modifier.weight(1f).fillMaxWidth(), contentAlignment = Alignment.Center) {
-            OriginalImage(coupon.originalAssetPath, code, Modifier.fillMaxWidth().height(360.dp).background(Color.White).padding(18.dp))
+        Column(Modifier.weight(1f).fillMaxWidth().verticalScroll(rememberScrollState()), horizontalAlignment = Alignment.CenterHorizontally) {
+            Text("쿠폰 원본", modifier = Modifier.padding(8.dp), color = Muted)
+            OriginalImage(coupon.originalAssetPath, null, Modifier.fillMaxWidth().height(420.dp).background(Color.White))
+            if (code != null) {
+                Text("바코드 확대", modifier = Modifier.padding(8.dp), color = Muted)
+                OriginalImage(coupon.originalAssetPath, code, Modifier.fillMaxWidth().height(180.dp).background(Color.White).padding(12.dp))
+            }
         }
         coupon.codeValue?.let { Text(it, fontFamily = FontFamily.Monospace, letterSpacing = 1.2.sp, modifier = Modifier.semantics { contentDescription = "현재 쿠폰 번호" }) }
         Text("직원에게 코드를 보여주세요.", color = Muted, modifier = Modifier.padding(10.dp))
@@ -278,7 +302,7 @@ private fun PresentScreen(coupon: Coupon, code: CodeCandidateEntity?, model: Wal
 @Composable
 private fun OriginalImage(path: String?, code: CodeCandidateEntity?, modifier: Modifier) {
     val bitmap = remember(path, code?.id) { path?.let { decodeBitmap(it, code) } }
-    if (bitmap != null) Image(bitmap.asImageBitmap(), "현재 쿠폰 원본 코드", modifier.clip(RoundedCornerShape(6.dp)), contentScale = ContentScale.Fit)
+    if (bitmap != null) Image(bitmap.asImageBitmap(), if (code == null) "쿠폰 원본 이미지" else "바코드 확대 이미지", modifier.clip(RoundedCornerShape(6.dp)), contentScale = ContentScale.Fit)
     else Box(modifier.background(NavySoft, RoundedCornerShape(6.dp)), contentAlignment = Alignment.Center) { Text("저장된 원본이 없어요.", color = Muted) }
 }
 
@@ -338,14 +362,6 @@ private fun EmptyWallet(onPickImages: () -> Unit, filtered: Boolean) {
         Text(if (filtered) "찾는 쿠폰이 없어요." else "쿠폰 이미지를 추가해 보세요.", fontWeight = FontWeight.SemiBold)
         if (!filtered) OutlinedButton(onPickImages) { Text("쿠폰 추가") }
     }
-}
-
-private fun typeColor(type: CouponType) = when (type) {
-    CouponType.EXCHANGE -> Color(0xFFEAEFF7)
-    CouponType.AMOUNT -> Color(0xFFE8F0EC)
-    CouponType.DISCOUNT -> Color(0xFFF8ECE3)
-    CouponType.NUMBER -> Color(0xFFEDEAE3)
-    CouponType.UNKNOWN -> Color(0xFFE9E9E9)
 }
 
 private fun typeLabel(type: CouponType) = when (type) {
