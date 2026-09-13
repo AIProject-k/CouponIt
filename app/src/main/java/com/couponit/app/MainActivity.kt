@@ -19,7 +19,7 @@ import com.couponit.app.ui.theme.CouponItTheme
 class MainActivity : ComponentActivity() {
     private val model: WalletViewModel by viewModels {
         val app = application as CouponItApplication
-        WalletViewModelFactory(app.repository, CouponImporter(this, app.repository, BarcodeRecognizer(this)))
+        WalletViewModelFactory(app.repository, CouponImporter(this, app.repository, BarcodeRecognizer()))
     }
     private val picker = registerForActivityResult(ActivityResultContracts.PickMultipleVisualMedia(30)) { model.import(it) }
 
