@@ -8,6 +8,17 @@
 이 저장소(`AIProject-k/CouponIt`)의 최초 배포. 기획 v2.0(`CouponIt_자체쿠폰지갑_상세기획_개발계획_v2.0.md`)의
 P0/P1 범위를 Kotlin 네이티브 Android 단일 모듈로 구현한 개발 검증 APK다. 서버·계정 없이 기기 내부에서만 동작한다.
 
+### 다운로드
+
+[릴리스 페이지](https://github.com/AIProject-k/CouponIt/releases/tag/v0.1.0)에 디버그 APK를 첨부했다.
+
+| 파일 | SHA-256 |
+| --- | --- |
+| `CouponIt-v0.1.0-debug.apk` | `753bcab44b0490ff410b67d3002c8ac6942a57cd13f0fc7e03d19fef7168c6bd` |
+
+서명은 디버그 키다. 배포용 서명이 아니므로 개인 테스트 기기 설치 용도로만 쓴다. 다른 서명의 기존 설치가 있으면
+먼저 제거해야 설치된다. 체크섬은 `SHA256SUMS.txt`(release 자산)에도 함께 올려뒀다.
+
 ### 추가됨
 
 **가져오기 · 저장**

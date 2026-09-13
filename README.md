@@ -6,6 +6,10 @@
 구현한 개발 검증 단계입니다. 서버나 계정 없이 앱 전용 저장소와 Room만 사용합니다. 최초 배포는
 [v0.1.0](https://github.com/AIProject-k/CouponIt/releases/tag/v0.1.0) — 자세한 변경 내역은 [CHANGELOG.md](CHANGELOG.md).
 
+빌드 없이 바로 써보려면 [릴리스 페이지](https://github.com/AIProject-k/CouponIt/releases/tag/v0.1.0)에서
+`CouponIt-v0.1.0-debug.apk`를 내려받아 설치하세요. 디버그 서명이라 배포용이 아니고, 다른 서명으로 이미
+설치돼 있으면 먼저 지우고 설치해야 합니다.
+
 ## 요구 사항
 
 - Android Studio (Kotlin, Jetpack Compose, Room, KSP)
