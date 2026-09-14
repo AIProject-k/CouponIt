@@ -32,6 +32,14 @@ class CouponRepository(private val dao: CouponDao) {
     suspend fun setLocation(id: String, location: CouponLocation) =
         dao.setLocation(id, location.name, System.currentTimeMillis())
 
+    /** 보관함에서 지갑으로 되돌린다. 사용 완료였다면 마지막 사용 기록을 되돌리는 이벤트를 남긴다. */
+    suspend fun restoreToWallet(coupon: Coupon) {
+        setLocation(coupon.id, CouponLocation.WALLET)
+        if (coupon.usageState == UsageState.COMPLETED) {
+            record(coupon.id, UsageEventType.EVENT_REVERSED, reversesEventId = dao.latestEventId(coupon.id, UsageEventType.REDEEM_MARKED.name))
+        }
+    }
+
     suspend fun startPresentation(couponId: String): String {
         val id = UUID.randomUUID().toString()
         dao.insertSession(PresentationSessionEntity(id, couponId, null, null, System.currentTimeMillis(), null))

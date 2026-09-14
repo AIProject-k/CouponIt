@@ -35,6 +35,9 @@ interface CouponDao {
     @Query("SELECT * FROM usage_events WHERE couponId = :couponId ORDER BY occurredAtEpochMillis")
     fun observeEvents(couponId: String): Flow<List<UsageEventEntity>>
 
+    @Query("SELECT id FROM usage_events WHERE couponId = :couponId AND type = :type ORDER BY occurredAtEpochMillis DESC LIMIT 1")
+    suspend fun latestEventId(couponId: String, type: String): String?
+
     @Insert(onConflict = OnConflictStrategy.IGNORE)
     suspend fun insertEvent(event: UsageEventEntity): Long
 

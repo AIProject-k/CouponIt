@@ -9,13 +9,13 @@ import com.couponit.app.data.local.CodeCandidateEntity
 import com.couponit.app.domain.Coupon
 import com.couponit.app.domain.CouponLocation
 import com.couponit.app.domain.CouponType
+import com.couponit.app.domain.DateInput
 import com.couponit.app.domain.UsageEventType
 import com.couponit.app.domain.WalletRules
 import com.couponit.app.domain.WalletSummary
 import com.couponit.app.importing.CouponImporter
 import com.couponit.app.recognition.CouponTextFields
 import kotlinx.coroutines.CancellationException
-import java.time.LocalDate
 import java.util.UUID
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
@@ -23,14 +23,6 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
-
-sealed interface WalletScreen {
-    data object Home : WalletScreen
-    data object Archive : WalletScreen
-    data object Settings : WalletScreen
-    data class Detail(val couponId: String) : WalletScreen
-    data class Present(val couponId: String) : WalletScreen
-}
 
 data class WalletUiState(
     val all: List<Coupon> = emptyList(),
@@ -66,7 +58,7 @@ class WalletViewModel(
         WalletUiState(
             all = coupons,
             visible = WalletRules.filter(coupons, q, selectedMerchant),
-            summary = WalletRules.summary(coupons, LocalDate.now()),
+            summary = WalletRules.summary(coupons, java.time.LocalDate.now()),
             query = q,
             merchant = selectedMerchant,
             screen = values[3] as WalletScreen,
@@ -86,6 +78,19 @@ class WalletViewModel(
             preferredCode.value = repository.preferredCode(screenValue.couponId)
         } else preferredCode.value = null
     }
+    /** 시스템 뒤로가기. 처리했으면 true, 최상위라 앱 기본 동작에 맡겨야 하면 false. */
+    fun back(): Boolean {
+        val current = screen.value
+        if (current == WalletScreen.Home) {
+            if (query.value.isEmpty() && merchant.value == null) return false
+            query.value = ""
+            merchant.value = null
+            return true
+        }
+        open(WalletNavigation.backTarget(current) ?: WalletScreen.Home)
+        return true
+    }
+
     fun dismissMessage() { message.value = null }
     fun notify(value: String) { message.value = value }
 
@@ -115,9 +120,9 @@ class WalletViewModel(
     }
 
     fun saveDetails(coupon: Coupon, title: String, merchantName: String, expiry: String, type: CouponType, issuerName: String?) = viewModelScope.launch {
-        val parsed = runCatching { LocalDate.parse(expiry.trim()) }.getOrNull()
+        val parsed = DateInput.parse(expiry)
         if (expiry.isNotBlank() && parsed == null) {
-            message.value = "종료일을 YYYY-MM-DD 형식의 올바른 날짜로 입력해 주세요."
+            message.value = "종료일은 2026-12-09 또는 20261209처럼 올바른 날짜로 입력해 주세요."
             return@launch
         }
         repository.save(coupon.copy(
@@ -126,29 +131,32 @@ class WalletViewModel(
             needsReview = title.isBlank() || merchantName.isBlank() || parsed == null || (coupon.codeValue == null),
         ))
         message.value = "쿠폰 정보를 저장했어요."
-        screen.value = WalletScreen.Home
+        open(WalletNavigation.backTarget(screen.value) ?: WalletScreen.Home)
     }
 
     fun toggleFavorite(coupon: Coupon) = viewModelScope.launch { repository.save(coupon.copy(favorite = !coupon.favorite)) }
-    fun move(couponId: String, location: CouponLocation) = viewModelScope.launch {
-        repository.setLocation(couponId, location)
-        screen.value = if (location == CouponLocation.WALLET) WalletScreen.Archive else WalletScreen.Home
-        message.value = if (location == CouponLocation.WALLET) "지갑으로 복원했어요." else "보관함으로 옮겼어요."
+    fun archive(couponId: String) = viewModelScope.launch {
+        repository.setLocation(couponId, CouponLocation.ARCHIVED)
+        open(WalletScreen.Home)
+        message.value = "보관함으로 옮겼어요."
+    }
+    fun restore(coupon: Coupon) = viewModelScope.launch {
+        repository.restoreToWallet(coupon)
+        if (screen.value is WalletScreen.Detail) open(WalletNavigation.backTarget(screen.value) ?: WalletScreen.Home)
+        message.value = "지갑으로 복원했어요."
     }
     fun markRedeemed(couponId: String) = viewModelScope.launch {
         repository.record(couponId, UsageEventType.REDEEM_MARKED, operationId = "redeem-${UUID.randomUUID()}")
-        screen.value = WalletScreen.Home
-        message.value = "사용한 쿠폰으로 기록했어요."
+        open(WalletScreen.Home)
+        message.value = "사용한 쿠폰으로 기록했어요. 잘못 눌렀다면 보관함에서 복원할 수 있어요."
     }
     fun setBalance(couponId: String, amount: Long) = viewModelScope.launch {
         repository.record(couponId, UsageEventType.BALANCE_SET, amountMinor = amount)
         message.value = "기준 잔액을 기록했어요."
-        screen.value = WalletScreen.Detail(couponId)
     }
     fun recordSpend(couponId: String, amount: Long) = viewModelScope.launch {
         repository.record(couponId, UsageEventType.SPEND_RECORDED, amountMinor = amount)
         message.value = "사용 금액을 기록했어요."
-        screen.value = WalletScreen.Detail(couponId)
     }
 }
 
