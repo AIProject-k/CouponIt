@@ -20,6 +20,8 @@ object CouponTextParser {
     private val otherLabel = label("구매일", "발행일", "주문번호", "쿠폰번호", "고객센터", "유의사항", "사용안내", "금액")
     private val datePattern = Regex("(?<!\\d)(20\\d{2})\\s*(?:[./-]|년)\\s*(\\d{1,2})\\s*(?:[./-]|월)\\s*(\\d{1,2})(?:\\s*일)?(?!\\d)")
     private val brands = listOf("스타벅스", "투썸플레이스", "메가MGC커피", "메가커피", "컴포즈커피", "이디야커피", "빽다방", "파리바게뜨", "뚜레쥬르", "배스킨라빈스", "던킨", "올리브영", "GS25", "CU", "세븐일레븐", "이마트24", "교촌치킨", "BHC", "BBQ")
+    // "[2609, 11번가]"처럼 한 줄 전체가 괄호로 감싸진 판매처·주문 태그. 상품명 후보에서 건너뛴다.
+    private val tagLine = Regex("^[\\[【(（][^\\]】)）]{1,30}[\\]】)）]$")
 
     fun parse(text: String): CouponTextFields {
         val lines = text.lines().map(String::trim).filter(String::isNotEmpty)
@@ -29,14 +31,14 @@ object CouponTextParser {
             value.takeIf { it.length in 2..80 && !isLabel(it) && !datePattern.containsMatchIn(it) }
         }.distinct().singleOrNull()
 
-        val brandLines = lines.mapIndexedNotNull { index, line ->
-            brands.firstOrNull { compact(it).equals(compact(line.trim('[', ']')), ignoreCase = true) }?.let { index to it }
-        }
+        val brandLines = lines.mapIndexedNotNull { index, line -> matchBrand(line)?.let { index to it } }
         val bracketedProducts = lines.mapNotNull { Regex("^\\[([^]\\n]{2,30})]\\s*(.{2,80})$").matchEntire(it) }
         val bracketedProduct = bracketedProducts.singleOrNull()
         val merchant = field(merchantLabel) ?: bracketedProduct?.groupValues?.get(1) ?: brandLines.map { it.second }.distinct().singleOrNull()
         val brandIndex = brandLines.firstOrNull { it.second == merchant }?.first
-        val title = field(titleLabel) ?: bracketedProduct?.groupValues?.get(2) ?: brandIndex?.let { lines.getOrNull(it + 1) }?.takeIf {
+        val title = field(titleLabel) ?: bracketedProduct?.groupValues?.get(2) ?: brandIndex?.let { index ->
+            lines.drop(index + 1).take(3).firstOrNull { !tagLine.matches(it) }
+        }?.takeIf {
             it.length in 2..80 && !isLabel(it) && !datePattern.containsMatchIn(it) &&
                 it.any(Char::isLetter) && !Regex("안내|유의|선물하기|사용불가|사용 불가").containsMatchIn(it)
         }
@@ -60,6 +62,25 @@ object CouponTextParser {
         }
         val expiry = expiryCandidates.distinct().singleOrNull()?.takeUnless { ambiguous }
         return CouponTextFields(title, merchant, expiry, expiry != null)
+    }
+
+    private fun matchBrand(line: String): String? {
+        val value = compact(line.trim('[', ']')).lowercase()
+        brands.firstOrNull { compact(it).lowercase() == value }?.let { return it }
+        // 강조 배경 위 글자처럼 OCR이 한 글자만 잘못 읽은 경우("메가MGC커파")만 허용. 짧은 이름은 오탐이 커서 정확히 일치해야 한다.
+        return brands.filter { compact(it).length >= 5 && editDistance(compact(it).lowercase(), value) <= 1 }.singleOrNull()
+    }
+
+    private fun editDistance(a: String, b: String): Int {
+        var previous = IntArray(b.length + 1) { it }
+        for (i in 1..a.length) {
+            val current = IntArray(b.length + 1).also { it[0] = i }
+            for (j in 1..b.length) {
+                current[j] = minOf(previous[j] + 1, current[j - 1] + 1, previous[j - 1] + if (a[i - 1] == b[j - 1]) 0 else 1)
+            }
+            previous = current
+        }
+        return previous[b.length]
     }
 
     private fun compact(value: String) = value.replace(Regex("\\s+"), "")

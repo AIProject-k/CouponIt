@@ -78,6 +78,24 @@ class CouponTextParserTest {
         assertNull(result.expiryDate)
     }
 
+    @Test fun `recognizes OCR-misread brand and skips marketplace tag line`() {
+        // 실제 11번가 메가MGC커피 교환권의 에뮬레이터 OCR 결과 형태. 쿠폰 번호는 가짜 값.
+        val result = CouponTextParser.parse("메가MGC커파\n[2609, 11번가]\n(ICE)하우스밀크 라떼\n유효기간 : 2026.09.07 ~ 2026.12.09\n1234 - 5678 - 9012")
+        assertEquals("메가MGC커피", result.merchantName)
+        assertEquals("(ICE)하우스밀크 라떼", result.title)
+        assertEquals(LocalDate.of(2026, 12, 9), result.expiryDate)
+    }
+
+    @Test fun `short brand names still require exact match`() {
+        assertNull(CouponTextParser.parse("스타벅쓰\n아이스 라떼").merchantName)
+    }
+
+    @Test fun `tag line is never used as title`() {
+        val result = CouponTextParser.parse("메가MGC커피\n[2609, 11번가]\n유효기간 2026.12.09")
+        assertEquals("메가MGC커피", result.merchantName)
+        assertNull(result.title)
+    }
+
     @Test fun `does not choose arbitrary last date without range separator`() {
         assertNull(CouponTextParser.parse("유효기간 2026.10.01 2026.11.01").expiryDate)
     }
