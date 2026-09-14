@@ -3,11 +3,11 @@
 쿠폰 이미지를 앱 안에 보관하고, 필요한 쿠폰을 빠르게 찾아 원본 코드 영역을 제시하며, 사용 기록을 남기는 개인용 Android 쿠폰 지갑입니다.
 
 현재 저장소는 v2.0 기획(`CouponIt_자체쿠폰지갑_상세기획_개발계획_v2.0.md`)의 P0/P1 범위를 네이티브 Android로
-구현한 개발 검증 단계입니다. 서버나 계정 없이 앱 전용 저장소와 Room만 사용합니다. 최초 배포는
-[v0.1.0](https://github.com/AIProject-k/CouponIt/releases/tag/v0.1.0) — 자세한 변경 내역은 [CHANGELOG.md](CHANGELOG.md).
+구현한 개발 검증 단계입니다. 서버나 계정 없이 앱 전용 저장소와 Room만 사용합니다. 최신 배포는
+[v0.1.1](https://github.com/AIProject-k/CouponIt/releases/tag/v0.1.1) — 자세한 변경 내역은 [CHANGELOG.md](CHANGELOG.md).
 
-빌드 없이 바로 써보려면 [릴리스 페이지](https://github.com/AIProject-k/CouponIt/releases/tag/v0.1.0)에서
-`CouponIt-v0.1.0-debug.apk`를 내려받아 설치하세요. 디버그 서명이라 배포용이 아니고, 다른 서명으로 이미
+빌드 없이 바로 써보려면 [릴리스 페이지](https://github.com/AIProject-k/CouponIt/releases/tag/v0.1.1)에서
+`CouponIt-v0.1.1-debug.apk`를 내려받아 설치하세요. 디버그 서명이라 배포용이 아니고, 다른 서명으로 이미
 설치돼 있으면 먼저 지우고 설치해야 합니다.
 
 ## 요구 사항
@@ -31,6 +31,7 @@ $env:JAVA_HOME = "C:\Program Files\Zulu\zulu-21"   # 위 이슈 회피용, 필�
 - 앱 전용 원본 사본·해시·Room 데이터 저장
 - ML Kit 바코드 후보 검출과 원본 영역 제시
 - 번들 한국어 OCR로 상품명·사용처·유효기간 자동 입력, 상세 화면에서 빈 항목 재인식
+- 상세 화면에서 발행사 선택 후 사용 여부 조회 페이지 열기(쿠폰 번호 복사)
 - 홈 요약·검색·사용처 필터·임박순·2열/목록
 - 상세 편집·보관함·교환권/금액권 사용 기록
 
@@ -38,12 +39,14 @@ $env:JAVA_HOME = "C:\Program Files\Zulu\zulu-21"   # 위 이슈 회피용, 필�
 
 기존 쿠폰은 상세 화면의 **이미지에서 정보 다시 인식**을 누른 뒤 결과를 확인하고 **정보 저장**을 누르세요. 재인식은 빈 항목만 채우므로 수정하려는 기존 값은 먼저 지우면 됩니다. 종료일은 유효기간 문맥에서 해석할 수 있을 때만 자동 입력하며, 인식하지 못한 값은 직접 입력할 수 있습니다. 로고만 있는 사용처나 지원하지 않는 표기에는 수동 확인이 필요합니다. [OCR 검증 기록](docs/verification/OCR_VERIFICATION.md)
 
+사용 여부는 앱이 자동으로 조회하지 않습니다. 상세 화면에서 쿠폰 원본에 적힌 **발행사**(쿠프마케팅·기프티쇼·페이즈)를 고르고 **발행사에서 사용 여부 조회**를 누르면, 쿠폰 번호를 복사한 뒤 발행사 조회 페이지를 엽니다. 조회 페이지는 보통 휴대폰 인증이 필요합니다. 사용 완료로 나오면 앱에서 **사용했어요**를 눌러 기록하세요. 사용처가 메가MGC커피면 쿠프마케팅을 추천하지만, 원본 표기가 다르면 바꿔 주세요. 선택한 발행사는 **정보 저장**을 눌러야 저장됩니다.
+
 ## 구조
 
 ```
 app/src/main/java/com/couponit/app/
   data/          Room 엔티티·DAO·Repository
-  domain/        Coupon·UsageEvent 등 도메인 모델, 지갑 규칙(WalletRules)
+  domain/        Coupon·UsageEvent 등 도메인 모델, 지갑 규칙(WalletRules), 발행사 조회 목록(IssuerLookup)
   importing/     이미지 가져오기 정책과 파이프라인(CouponImporter)
   recognition/   바코드(BarcodeRecognizer)·한국어 OCR(CouponTextRecognizer/Parser)
   ui/            Compose 화면(CouponItApp)과 WalletViewModel

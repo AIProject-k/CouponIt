@@ -87,6 +87,7 @@ class WalletViewModel(
         } else preferredCode.value = null
     }
     fun dismissMessage() { message.value = null }
+    fun notify(value: String) { message.value = value }
 
     fun import(uris: List<Uri>) = viewModelScope.launch {
         if (uris.isEmpty()) return@launch
@@ -113,14 +114,14 @@ class WalletViewModel(
         }
     }
 
-    fun saveDetails(coupon: Coupon, title: String, merchantName: String, expiry: String, type: CouponType) = viewModelScope.launch {
+    fun saveDetails(coupon: Coupon, title: String, merchantName: String, expiry: String, type: CouponType, issuerName: String?) = viewModelScope.launch {
         val parsed = runCatching { LocalDate.parse(expiry.trim()) }.getOrNull()
         if (expiry.isNotBlank() && parsed == null) {
             message.value = "종료일을 YYYY-MM-DD 형식의 올바른 날짜로 입력해 주세요."
             return@launch
         }
         repository.save(coupon.copy(
-            title = title.ifBlank { "이름 미확인" }, merchantName = merchantName.ifBlank { null }, type = type,
+            title = title.ifBlank { "이름 미확인" }, merchantName = merchantName.ifBlank { null }, type = type, issuerName = issuerName,
             expiryDate = parsed, expiryConfirmed = parsed != null,
             needsReview = title.isBlank() || merchantName.isBlank() || parsed == null || (coupon.codeValue == null),
         ))

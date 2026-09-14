@@ -1,7 +1,15 @@
 package com.couponit.app.ui
 
+import android.content.ActivityNotFoundException
+import android.content.ClipData
+import android.content.ClipDescription
+import android.content.ClipboardManager
+import android.content.Context
+import android.content.Intent
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
+import android.os.Build
+import android.os.PersistableBundle
 import android.view.WindowManager
 import androidx.activity.compose.LocalActivity
 import androidx.compose.foundation.Image
@@ -67,6 +75,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalConfiguration
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontFamily
@@ -75,10 +84,13 @@ import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.core.net.toUri
 import com.couponit.app.data.local.CodeCandidateEntity
 import com.couponit.app.domain.Coupon
 import com.couponit.app.domain.CouponLocation
+import com.couponit.app.domain.CouponIssuer
 import com.couponit.app.domain.CouponType
+import com.couponit.app.domain.IssuerLookup
 import com.couponit.app.ui.theme.Card
 import com.couponit.app.ui.theme.Ink
 import com.couponit.app.ui.theme.Muted
@@ -219,6 +231,10 @@ private fun DetailScreen(coupon: Coupon, model: WalletViewModel) {
     var expiry by remember(coupon.id) { mutableStateOf(coupon.expiryDate?.toString().orEmpty()) }
     var type by remember(coupon.id) { mutableStateOf(coupon.type) }
     var recognizing by remember(coupon.id) { mutableStateOf(false) }
+    var issuerName by remember(coupon.id) { mutableStateOf(IssuerLookup.byName(coupon.issuerName)?.name) }
+    val suggestedIssuer = IssuerLookup.suggest(merchant)
+    val issuer = IssuerLookup.byName(issuerName) ?: suggestedIssuer
+    val context = LocalContext.current
     val scope = rememberCoroutineScope()
     Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(16.dp)) {
         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
@@ -247,11 +263,45 @@ private fun DetailScreen(coupon: Coupon, model: WalletViewModel) {
         OutlinedTextField(merchant, { merchant = it }, Modifier.fillMaxWidth(), label = { Text("사용처") }, singleLine = true)
         OutlinedTextField(expiry, { expiry = it }, Modifier.fillMaxWidth(), label = { Text("사용 기간 종료 (YYYY-MM-DD)") }, singleLine = true)
         LazyRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) { items(CouponType.entries) { value -> FilterChip(type == value, { type = value }, { Text(typeLabel(value)) }) } }
-        Button({ model.saveDetails(coupon, title, merchant, expiry, type) }, Modifier.fillMaxWidth(), enabled = !recognizing) { Text("정보 저장") }
+        Spacer(Modifier.height(8.dp))
+        Text("발행사", fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
+        LazyRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+            items(IssuerLookup.issuers) { value -> FilterChip(issuer?.name == value.name, { issuerName = value.name }, { Text(value.name) }) }
+        }
+        Text(
+            when {
+                issuer == null -> "쿠폰 원본에 적힌 발행사를 고르면 사용 여부 조회 페이지를 열 수 있어요."
+                issuerName == null -> "사용처 기준 추천이에요. 원본의 발행사 표기가 다르면 바꿔 주세요."
+                else -> issuer.howTo
+            },
+            color = Muted, fontSize = 11.sp,
+        )
+        Button({ model.saveDetails(coupon, title, merchant, expiry, type, issuer?.name) }, Modifier.fillMaxWidth(), enabled = !recognizing) { Text("정보 저장") }
         Button({ model.open(WalletScreen.Present(coupon.id)) }, Modifier.fillMaxWidth(), enabled = coupon.originalAssetPath != null) { Text(if (coupon.codeValue != null) "원본·바코드 크게 보기" else "원본 크게 보기") }
+        OutlinedButton({ issuer?.let { openIssuerLookup(context, it, coupon.codeValue, model) } }, Modifier.fillMaxWidth(), enabled = issuer != null) {
+            Text("발행사에서 사용 여부 조회")
+        }
+        Text("쿠폰 번호를 복사하고 조회 페이지를 열어요. 사용 완료로 나오면 아래에서 기록해 주세요.", color = Muted, fontSize = 11.sp)
         if (coupon.type == CouponType.AMOUNT) AmountControls(coupon, model)
         else Button({ model.markRedeemed(coupon.id) }, Modifier.fillMaxWidth()) { Text("사용했어요") }
         Text("코드를 열어 본 사실과 실제 사용 기록은 별도로 저장됩니다.", color = Muted, fontSize = 11.sp)
+    }
+}
+
+private fun openIssuerLookup(context: Context, issuer: CouponIssuer, code: String?, model: WalletViewModel) {
+    if (code != null) {
+        val clip = ClipData.newPlainText("쿠폰 번호", code)
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            // 시스템 붙여넣기 미리보기에 쿠폰 번호가 그대로 보이지 않게 한다.
+            clip.description.extras = PersistableBundle().apply { putBoolean(ClipDescription.EXTRA_IS_SENSITIVE, true) }
+        }
+        context.getSystemService(ClipboardManager::class.java).setPrimaryClip(clip)
+    }
+    try {
+        context.startActivity(Intent(Intent.ACTION_VIEW, issuer.lookupUrl.toUri()))
+        model.notify(if (code != null) "쿠폰 번호를 복사했어요. ${issuer.name} 조회 페이지에 붙여 넣어 확인해 주세요." else "인식된 쿠폰 번호가 없어요. 원본을 보고 직접 입력해 주세요.")
+    } catch (_: ActivityNotFoundException) {
+        model.notify("웹 페이지를 열 수 있는 앱이 없어요.")
     }
 }
 
