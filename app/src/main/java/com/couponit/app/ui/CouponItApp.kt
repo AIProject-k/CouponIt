@@ -94,6 +94,7 @@ import com.couponit.app.domain.CouponLocation
 import com.couponit.app.domain.CouponIssuer
 import com.couponit.app.domain.CouponType
 import com.couponit.app.domain.IssuerLookup
+import com.couponit.app.domain.PixelRect
 import com.couponit.app.domain.UsageState
 import com.couponit.app.ui.theme.Card
 import com.couponit.app.ui.theme.Ink
@@ -204,12 +205,12 @@ private fun CouponCard(coupon: Coupon, model: WalletViewModel, grid: Boolean) {
     ) {
         if (grid) {
             Column {
-                OriginalImage(coupon.originalAssetPath, null, Modifier.fillMaxWidth().height(150.dp).background(Color.White))
+                OriginalImage(coupon.originalAssetPath, coupon.crop, Modifier.fillMaxWidth().height(150.dp).background(Color.White))
                 CouponInfo(coupon, Modifier.padding(10.dp))
                 PresentButton(coupon, model, Modifier.fillMaxWidth().padding(8.dp))
             }
         } else Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-            OriginalImage(coupon.originalAssetPath, null, Modifier.padding(10.dp).size(72.dp))
+            OriginalImage(coupon.originalAssetPath, coupon.crop, Modifier.padding(10.dp).size(72.dp))
             CouponInfo(coupon, Modifier.weight(1f).padding(vertical = 10.dp))
             PresentButton(coupon, model, Modifier.fillMaxHeight().width(76.dp).padding(6.dp))
         }
@@ -265,7 +266,7 @@ private fun DetailScreen(coupon: Coupon, screen: WalletScreen.Detail, model: Wal
             }
         }
         Spacer(Modifier.height(16.dp))
-        OriginalImage(coupon.originalAssetPath, null, Modifier.fillMaxWidth().height(230.dp))
+        OriginalImage(coupon.originalAssetPath, coupon.crop, Modifier.fillMaxWidth().height(230.dp))
         OutlinedButton({
             recognizing = true
             scope.launch {
@@ -372,10 +373,20 @@ private fun PresentScreen(coupon: Coupon, code: CodeCandidateEntity?, screen: Wa
         Spacer(Modifier.height(18.dp)); Text(coupon.title, fontWeight = FontWeight.Bold, fontSize = 18.sp)
         Column(Modifier.weight(1f).fillMaxWidth().verticalScroll(rememberScrollState()), horizontalAlignment = Alignment.CenterHorizontally) {
             Text("쿠폰 원본", modifier = Modifier.padding(8.dp), color = Muted)
-            OriginalImage(coupon.originalAssetPath, null, Modifier.fillMaxWidth().height(420.dp).background(Color.White))
+            OriginalImage(coupon.originalAssetPath, coupon.crop, Modifier.fillMaxWidth().height(420.dp).background(Color.White))
             if (code != null) {
                 Text("바코드 확대", modifier = Modifier.padding(8.dp), color = Muted)
-                OriginalImage(coupon.originalAssetPath, code, Modifier.fillMaxWidth().height(180.dp).background(Color.White).padding(12.dp))
+                OriginalImage(
+                    coupon.originalAssetPath, code.rect(), Modifier.fillMaxWidth().height(180.dp).background(Color.White).padding(12.dp),
+                    description = "바코드 확대 이미지", pad = true,
+                )
+            }
+            if (coupon.crop != null) {
+                Text("전체 스크린샷", modifier = Modifier.padding(8.dp), color = Muted)
+                OriginalImage(
+                    coupon.originalAssetPath, null, Modifier.fillMaxWidth().height(260.dp).background(Color.White),
+                    description = "전체 스크린샷 이미지",
+                )
             }
         }
         coupon.codeValue?.let { Text(it, fontFamily = FontFamily.Monospace, letterSpacing = 1.2.sp, modifier = Modifier.semantics { contentDescription = "현재 쿠폰 번호" }) }
@@ -413,21 +424,29 @@ private fun LeaveConfirmDialog(onLeave: () -> Unit, onDismiss: () -> Unit) {
 }
 
 @Composable
-private fun OriginalImage(path: String?, code: CodeCandidateEntity?, modifier: Modifier) {
-    val bitmap = remember(path, code?.id) { path?.let { decodeBitmap(it, code) } }
-    if (bitmap != null) Image(bitmap.asImageBitmap(), if (code == null) "쿠폰 원본 이미지" else "바코드 확대 이미지", modifier.clip(RoundedCornerShape(6.dp)), contentScale = ContentScale.Fit)
+private fun OriginalImage(
+    path: String?,
+    crop: PixelRect?,
+    modifier: Modifier,
+    description: String = "쿠폰 원본 이미지",
+    pad: Boolean = false,
+) {
+    val bitmap = remember(path, crop, pad) { path?.let { decodeBitmap(it, crop, pad) } }
+    if (bitmap != null) Image(bitmap.asImageBitmap(), description, modifier.clip(RoundedCornerShape(6.dp)), contentScale = ContentScale.Fit)
     else Box(modifier.background(NavySoft, RoundedCornerShape(6.dp)), contentAlignment = Alignment.Center) { Text("저장된 원본이 없어요.", color = Muted) }
 }
 
-private fun decodeBitmap(path: String, code: CodeCandidateEntity?): Bitmap? {
+private fun CodeCandidateEntity.rect() = PixelRect(left, top, right, bottom)
+
+private fun decodeBitmap(path: String, crop: PixelRect?, pad: Boolean): Bitmap? {
     val source = BitmapFactory.decodeFile(path) ?: return null
-    if (code == null || code.right <= code.left || code.bottom <= code.top) return source
-    val padX = ((code.right - code.left) * .12f).toInt()
-    val padY = ((code.bottom - code.top) * .18f).toInt()
-    val left = (code.left - padX).coerceAtLeast(0)
-    val top = (code.top - padY).coerceAtLeast(0)
-    val right = (code.right + padX).coerceAtMost(source.width)
-    val bottom = (code.bottom + padY).coerceAtMost(source.height)
+    if (crop == null || crop.width <= 0 || crop.height <= 0) return source
+    val padX = if (pad) (crop.width * .12f).toInt() else 0
+    val padY = if (pad) (crop.height * .18f).toInt() else 0
+    val left = (crop.left - padX).coerceIn(0, source.width - 1)
+    val top = (crop.top - padY).coerceIn(0, source.height - 1)
+    val right = (crop.right + padX).coerceIn(left + 1, source.width)
+    val bottom = (crop.bottom + padY).coerceIn(top + 1, source.height)
     return Bitmap.createBitmap(source, left, top, right - left, bottom - top)
 }
 

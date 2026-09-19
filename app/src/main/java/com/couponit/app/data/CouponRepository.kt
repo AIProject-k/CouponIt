@@ -24,9 +24,13 @@ class CouponRepository(private val dao: CouponDao) {
         dao.observeEvents(couponId).map { list -> list.map { it.toDomain() } }
 
     suspend fun coupon(id: String): Coupon? = dao.coupon(id)?.toDomain()
+    suspend fun hasAsset(id: String): Boolean = dao.asset(id) != null
     suspend fun save(coupon: Coupon) = dao.upsertCoupon(coupon.toEntity())
-    suspend fun saveAsset(asset: ImageAssetEntity) = dao.insertAsset(asset)
     suspend fun saveCandidates(candidates: List<CodeCandidateEntity>) = dao.upsertCandidates(candidates)
+    suspend fun saveImport(asset: ImageAssetEntity, coupons: List<ImportCoupon>): ImportSaveResult {
+        val result = dao.insertImport(asset, coupons.map { it.coupon.toEntity() }, coupons.flatMap { it.candidates })
+        return ImportSaveResult(result.savedCouponIds, result.duplicates)
+    }
     suspend fun preferredCode(couponId: String) = dao.preferredCode(couponId)
 
     suspend fun setLocation(id: String, location: CouponLocation) =
@@ -70,3 +74,6 @@ class CouponRepository(private val dao: CouponDao) {
         return dao.recordEventOnce(event, state)
     }
 }
+
+data class ImportCoupon(val coupon: Coupon, val candidates: List<CodeCandidateEntity>)
+data class ImportSaveResult(val savedCouponIds: List<String>, val duplicates: Int)

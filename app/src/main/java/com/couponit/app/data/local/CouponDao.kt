@@ -17,17 +17,55 @@ interface CouponDao {
     @Query("SELECT * FROM coupons WHERE id = :id")
     suspend fun coupon(id: String): CouponEntity?
 
+    @Query("SELECT * FROM image_assets WHERE id = :id")
+    suspend fun asset(id: String): ImageAssetEntity?
+
     @Upsert
     suspend fun upsertCoupon(coupon: CouponEntity)
+
+    @Insert(onConflict = OnConflictStrategy.ABORT)
+    suspend fun insertCoupon(coupon: CouponEntity)
 
     @Update
     suspend fun updateCoupon(coupon: CouponEntity)
 
+    @Query("SELECT id FROM coupons WHERE codeValue = :codeValue LIMIT 1")
+    suspend fun couponIdByCode(codeValue: String): String?
+
     @Insert(onConflict = OnConflictStrategy.ABORT)
     suspend fun insertAsset(asset: ImageAssetEntity)
 
+    @Query("DELETE FROM image_assets WHERE id = :id")
+    suspend fun deleteAsset(id: String)
+
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun upsertCandidates(candidates: List<CodeCandidateEntity>)
+
+    @Insert(onConflict = OnConflictStrategy.ABORT)
+    suspend fun insertCandidates(candidates: List<CodeCandidateEntity>)
+
+    /** 원본과 그 원본에서 새로 만든 쿠폰들을 한 트랜잭션으로 저장한다. */
+    @Transaction
+    suspend fun insertImport(
+        asset: ImageAssetEntity,
+        coupons: List<CouponEntity>,
+        candidates: List<CodeCandidateEntity>,
+    ): ImportWriteResult {
+        insertAsset(asset)
+        val savedIds = mutableListOf<String>()
+        var duplicates = 0
+        for (coupon in coupons) {
+            if (coupon.codeValue != null && couponIdByCode(coupon.codeValue) != null) {
+                duplicates++
+                continue
+            }
+            insertCoupon(coupon)
+            insertCandidates(candidates.filter { it.couponId == coupon.id })
+            savedIds += coupon.id
+        }
+        if (savedIds.isEmpty()) deleteAsset(asset.id)
+        return ImportWriteResult(savedIds, duplicates)
+    }
 
     @Query("SELECT * FROM code_candidates WHERE couponId = :couponId ORDER BY selected DESC, id ASC LIMIT 1")
     suspend fun preferredCode(couponId: String): CodeCandidateEntity?
@@ -60,3 +98,5 @@ interface CouponDao {
         return true
     }
 }
+
+data class ImportWriteResult(val savedCouponIds: List<String>, val duplicates: Int)

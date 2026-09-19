@@ -42,28 +42,33 @@ object ScanRegionPlanner {
 }
 
 class BarcodeRecognizer {
+    /**
+     * 이미지 전체의 바코드를 모두 찾는다. 첫 검출에서 멈추면 긴 스크린샷 아래쪽 쿠폰을 놓치므로,
+     * 겹치는 구간을 끝까지 훑고 같은 번호는 한 번만 남긴다.
+     */
     suspend fun recognize(file: File): List<DetectedCode> {
         val bitmap = android.graphics.BitmapFactory.decodeFile(file.path) ?: return emptyList()
         val scanner = BarcodeScanning.getClient()
         return try {
+            val found = LinkedHashMap<String, DetectedCode>()
             for (region in ScanRegionPlanner.plan(bitmap.width, bitmap.height)) {
                 val crop = android.graphics.Bitmap.createBitmap(bitmap, region.left, region.top, region.width, region.height)
                 val image = InputImage.fromBitmap(crop, 0)
-                val detected = scanner.process(image).awaitResult().mapNotNull { barcode ->
-                    val raw = barcode.rawValue ?: return@mapNotNull null
+                scanner.process(image).awaitResult().forEach { barcode ->
+                    val raw = barcode.rawValue ?: return@forEach
                     val box = barcode.boundingBox
-                    DetectedCode(
+                    val code = DetectedCode(
                         format = barcode.format.toString(), rawValue = raw,
                         left = (box?.left ?: 0) + region.left,
                         top = (box?.top ?: 0) + region.top,
                         right = (box?.right ?: image.width) + region.left,
                         bottom = (box?.bottom ?: image.height) + region.top,
                     )
-                }.distinctBy { it.format to it.rawValue }
+                    found.putIfAbsent(code.rawValue, code)
+                }
                 if (crop !== bitmap) crop.recycle()
-                if (detected.isNotEmpty()) return detected
             }
-            emptyList()
+            found.values.sortedBy { it.top }
         } finally {
             scanner.close()
             bitmap.recycle()

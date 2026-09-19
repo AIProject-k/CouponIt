@@ -96,6 +96,39 @@ class CouponTextParserTest {
         assertNull(result.title)
     }
 
+    @Test fun `reads naver pay gift coupon card`() {
+        // 네이버페이 교환권 목록 화면 형식. 쿠폰 번호는 가짜 값.
+        val result = CouponTextParser.parse("메가MGC커피 선물하기\n[EVENT] 메가MGC커피 저당 골든애플 블랙티\n1234 5678 9012\n복사\n93일남음 2026.12.21까지 사용가능")
+        assertEquals("메가MGC커피", result.merchantName)
+        assertEquals("메가MGC커피 저당 골든애플 블랙티", result.title)
+        assertEquals(LocalDate.of(2026, 12, 21), result.expiryDate)
+        assertTrue(result.expiryConfirmed)
+    }
+
+    @Test fun `reads a date that OCR split with a stray space`() {
+        // 실제 인식 결과: "|93일남음 2026.1 2.21 까지 사용가능"
+        val result = CouponTextParser.parse("|93일남음 2026.1 2.21 까지 사용가능")
+        assertEquals(LocalDate.of(2026, 12, 21), result.expiryDate)
+        assertTrue(result.expiryConfirmed)
+    }
+
+    @Test fun `event tag is not a merchant`() {
+        assertNull(CouponTextParser.parse("[EVENT] 어떤 상품\n2026.12.21까지 사용가능").merchantName)
+    }
+
+    @Test fun `known merchant is recovered from event product when card header is clipped`() {
+        val result = CouponTextParser.parse("[EVENT] 메가MGC커피 저당 골든애플 블랙티\n2026.12.21까지 사용가능")
+
+        assertEquals("메가MGC커피", result.merchantName)
+        assertEquals("메가MGC커피 저당 골든애플 블랙티", result.title)
+    }
+
+    @Test fun `relative days left is not an expiry`() {
+        val result = CouponTextParser.parse("메가MGC커피 선물하기\n[EVENT] 어떤 상품\n93일남음")
+        assertNull(result.expiryDate)
+        assertFalse(result.expiryConfirmed)
+    }
+
     @Test fun `does not choose arbitrary last date without range separator`() {
         assertNull(CouponTextParser.parse("유효기간 2026.10.01 2026.11.01").expiryDate)
     }

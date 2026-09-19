@@ -7,6 +7,7 @@ import androidx.room.PrimaryKey
 import com.couponit.app.domain.Coupon
 import com.couponit.app.domain.CouponLocation
 import com.couponit.app.domain.CouponType
+import com.couponit.app.domain.PixelRect
 import com.couponit.app.domain.UsageEvent
 import com.couponit.app.domain.UsageEventType
 import com.couponit.app.domain.UsageState
@@ -33,16 +34,17 @@ data class CouponEntity(
     val codeFormat: String?,
     val createdAtEpochMillis: Long,
     val updatedAtEpochMillis: Long,
+    val assetId: String? = null,
+    val cropLeft: Int? = null,
+    val cropTop: Int? = null,
+    val cropRight: Int? = null,
+    val cropBottom: Int? = null,
 )
 
-@Entity(
-    tableName = "image_assets",
-    foreignKeys = [ForeignKey(entity = CouponEntity::class, parentColumns = ["id"], childColumns = ["couponId"], onDelete = ForeignKey.CASCADE)],
-    indices = [Index("couponId"), Index(value = ["sha256"])],
-)
+// 쿠폰이 원본을 참조한다. 한 스크린샷에서 여러 쿠폰이 나오므로 원본은 쿠폰에 종속되지 않는다.
+@Entity(tableName = "image_assets", indices = [Index(value = ["sha256"])])
 data class ImageAssetEntity(
     @PrimaryKey val id: String,
-    val couponId: String,
     val kind: String,
     val path: String,
     val sha256: String,
@@ -104,6 +106,7 @@ fun Coupon.toEntity(now: Long = System.currentTimeMillis()) = CouponEntity(
     id, title, merchantName, issuerName, type.name, faceValueMinor, currency,
     expiryDate?.toString(), expiryConfirmed, favorite, usageState.name, location.name,
     needsReview, originalAssetPath, codeValue, codeFormat, now, now,
+    assetId, crop?.left, crop?.top, crop?.right, crop?.bottom,
 )
 
 fun CouponEntity.toDomain() = Coupon(
@@ -123,6 +126,10 @@ fun CouponEntity.toDomain() = Coupon(
     originalAssetPath = originalAssetPath,
     codeValue = codeValue,
     codeFormat = codeFormat,
+    assetId = assetId,
+    crop = if (cropLeft != null && cropTop != null && cropRight != null && cropBottom != null) {
+        PixelRect(cropLeft, cropTop, cropRight, cropBottom)
+    } else null,
 )
 
 fun UsageEventEntity.toDomain() = UsageEvent(

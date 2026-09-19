@@ -95,19 +95,28 @@ class WalletViewModel(
     fun notify(value: String) { message.value = value }
 
     fun import(uris: List<Uri>) = viewModelScope.launch {
-        if (uris.isEmpty()) return@launch
+        if (uris.isEmpty() || importing.value) return@launch
         importing.value = true
         val results = try { uris.take(30).map { importer.import(it) } } finally { importing.value = false }
-        val saved = results.count { it.couponId != null }
-        val failed = results.size - saved
-        message.value = if (failed == 0) "쿠폰 ${saved}개를 저장했어요. 정보를 확인해 주세요." else "${saved}개 저장, ${failed}개는 추가하지 못했어요."
-        if (results.any { it.textRecognitionFailed }) message.value += " 글자 인식에 실패한 쿠폰은 상세에서 다시 인식해 주세요."
+        val found = results.sumOf { it.found }
+        val saved = results.sumOf { it.saved }
+        val duplicates = results.sumOf { it.duplicates }
+        val review = results.sumOf { it.needsReview }
+        val failed = results.count { it.error != null }
+        message.value = buildString {
+            append(if (saved > 0) "쿠폰 ${saved}개를 저장했어요." else "새로 저장한 쿠폰이 없어요.")
+            if (found > saved + duplicates) append(" 이미지에서 ${found}개를 찾았어요.")
+            if (duplicates > 0) append(" 이미 있는 쿠폰 ${duplicates}개는 건너뛰었어요.")
+            if (review > 0) append(" ${review}개는 정보 확인이 필요해요.")
+            if (failed > 0) append(" ${failed}장은 추가하지 못했어요.")
+            if (results.any { it.textRecognitionFailed }) append(" 글자 인식에 실패한 쿠폰은 상세에서 다시 인식해 주세요.")
+        }
     }
 
     suspend fun recognizeDetails(coupon: Coupon): CouponTextFields? {
         val path = coupon.originalAssetPath ?: return null
         return try {
-            importer.recognizeText(path).also {
+            importer.recognizeText(path, coupon.crop).also {
                 message.value = if (it == CouponTextFields()) "인식 가능한 정보를 찾지 못했어요. 원본을 보고 직접 입력해 주세요."
                 else "빈 항목에 인식 결과를 채웠어요. 원본과 비교한 뒤 저장해 주세요."
             }

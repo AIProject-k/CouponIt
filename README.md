@@ -4,10 +4,10 @@
 
 현재 저장소는 v2.0 기획(`CouponIt_자체쿠폰지갑_상세기획_개발계획_v2.0.md`)의 P0/P1 범위를 네이티브 Android로
 구현한 개발 검증 단계입니다. 서버나 계정 없이 앱 전용 저장소와 Room만 사용합니다. 최신 배포는
-[v0.1.2](https://github.com/AIProject-k/CouponIt/releases/tag/v0.1.2) — 자세한 변경 내역은 [CHANGELOG.md](CHANGELOG.md).
+[v0.1.3](https://github.com/AIProject-k/CouponIt/releases/tag/v0.1.3) — 자세한 변경 내역은 [CHANGELOG.md](CHANGELOG.md).
 
-빌드 없이 바로 써보려면 [릴리스 페이지](https://github.com/AIProject-k/CouponIt/releases/tag/v0.1.2)에서
-`CouponIt-v0.1.2-debug.apk`를 내려받아 설치하세요. 디버그 서명이라 배포용이 아니고, 다른 서명으로 이미
+빌드 없이 바로 써보려면 [릴리스 페이지](https://github.com/AIProject-k/CouponIt/releases/tag/v0.1.3)에서
+`CouponIt-v0.1.3-debug.apk`를 내려받아 설치하세요. 디버그 서명이라 배포용이 아니고, 다른 서명으로 이미
 설치돼 있으면 먼저 지우고 설치해야 합니다.
 
 ## 요구 사항
@@ -28,6 +28,8 @@ $env:JAVA_HOME = "C:\Program Files\Zulu\zulu-21"   # 위 이슈 회피용, 필�
 ## 현재 구현
 
 - 여러 JPEG/PNG 이미지 선택 및 다른 앱의 이미지 공유 수신
+- 한 스크린샷에 쿠폰이 여러 개면 바코드별로 나눠 각각 저장(원본은 한 번만 보관하고 영역으로 참조)
+- 같은 쿠폰 번호는 다시 담아도 추가되지 않음
 - 앱 전용 원본 사본·해시·Room 데이터 저장
 - ML Kit 바코드 후보 검출과 원본 영역 제시
 - 번들 한국어 OCR로 상품명·사용처·유효기간 자동 입력, 상세 화면에서 빈 항목 재인식
@@ -49,6 +51,7 @@ $env:JAVA_HOME = "C:\Program Files\Zulu\zulu-21"   # 위 이슈 회피용, 필�
 - **수정 화면**: 저장하지 않은 변경이 있으면 나가기 전에 확인합니다. 글자 입력 중에는 첫 뒤로가기가 키보드를 닫습니다. 종료일은 `2026-12-09`, `2026.12.09`, `20261209` 형식을 받습니다.
 - **사용했어요**: 한 번 더 확인한 뒤 기록합니다. 잘못 기록했다면 **보관함**에서 **복원**하면 사용 전 상태로 돌아갑니다. 보관함 카드를 누르면 정보 수정 화면이 열립니다.
 - **금액권**: 코드 제시 화면의 **사용 금액 기록하러 가기**로 수정 화면의 금액 기록으로 이동합니다.
+- **여러 쿠폰이 담긴 화면**: 목록·수정 화면은 그 쿠폰의 영역만, 코드 화면은 쿠폰 영역·바코드 확대·전체 스크린샷을 함께 보여줍니다. 칸 경계가 애매하면 **확인 필요**로 표시합니다.
 
 ## 구조
 
@@ -57,7 +60,7 @@ app/src/main/java/com/couponit/app/
   data/          Room 엔티티·DAO·Repository
   domain/        Coupon·UsageEvent 등 도메인 모델, 지갑 규칙(WalletRules), 발행사 조회 목록(IssuerLookup)
   importing/     이미지 가져오기 정책과 파이프라인(CouponImporter)
-  recognition/   바코드(BarcodeRecognizer)·한국어 OCR(CouponTextRecognizer/Parser)
+  recognition/   바코드(BarcodeRecognizer)·한국어 OCR(CouponTextRecognizer/Parser)·쿠폰 칸 분리(CouponSplitter)
   ui/            Compose 화면(CouponItApp)과 WalletViewModel
 docs/
   verification/  실행 근거를 코드 변경과 분리해 기록 (P0/P1, OCR)
