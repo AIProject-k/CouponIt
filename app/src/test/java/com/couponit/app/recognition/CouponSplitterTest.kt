@@ -105,6 +105,26 @@ class CouponSplitterTest {
         assertTrue(slices[2].text.contains("2026.12.03"))
     }
 
+    @Test fun `page header above the first card is left out`() {
+        // 실제 화면: 카드 위에 "교환권 전체보기", "총 5장의 교환권이 있습니다."가 떨어져 있다.
+        val header = listOf(line("교환권 전체보기", 263), line("총 5장의 교환권이 있습니다.", 409))
+        val codes = listOf(code(652, "A"), code(1213, "B"))
+        val slices = CouponSplitter.split(923, 2000, codes, header + card(1, 547) + card(2, 1101))
+
+        assertFalse(slices[0].text.contains("전체보기"))
+        assertFalse(slices[0].text.contains("총 5장"))
+        assertTrue(slices[0].text.contains("상품 1"))
+    }
+
+    @Test fun `button under the last card is left out`() {
+        val codes = listOf(code(690, "A"), code(1250, "B"))
+        val lines = card(1, 500) + card(2, 1060) + listOf(line("주문내역 가기", 1814))
+        val slices = CouponSplitter.split(923, 2000, codes, lines)
+
+        assertFalse(slices[1].text.contains("주문내역"))
+        assertTrue(slices[1].text.contains("상품 2"))
+    }
+
     @Test fun `no barcode means no slice`() {
         assertEquals(emptyList<CouponSlice>(), CouponSplitter.split(920, 1900, emptyList(), card(1, 500)))
     }

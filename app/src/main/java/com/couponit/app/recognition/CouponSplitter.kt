@@ -63,14 +63,56 @@ object CouponSplitter {
             } else boundaries[index]
             val gapAbove = if (index == 0) Int.MAX_VALUE else code.top - sorted[index - 1].bottom
             val gapBelow = if (index == sorted.lastIndex) Int.MAX_VALUE else sorted[index + 1].top - code.bottom
-            val region = PixelRect(0, top, imageWidth, bottom)
+            val band = PixelRect(0, top, imageWidth, bottom)
+            val region = tightenToCard(band, code, lines.filter { it.centerY in top until bottom })
             CouponSlice(
                 code = code,
                 region = region,
-                lines = lines.filter { it.centerY in top until bottom },
+                lines = lines.filter { it.centerY in region.top until region.bottom },
                 uncertain = minOf(gapAbove, gapBelow) < pitch * CLOSE_RATIO,
             )
         }
+    }
+
+    /**
+     * 칸 경계를 카드 실제 크기로 좁힌다. 바코드에서 위아래로 줄을 훑다가 줄 간격이 갑자기 벌어지면 멈춘다.
+     * 카드 안의 줄 간격은 고르고, 페이지 머리말이나 하단 버튼은 확연히 떨어져 있다는 점을 쓴다.
+     * 끊을 자리를 못 찾으면 원래 칸(band)을 그대로 둔다.
+     */
+    private fun tightenToCard(band: PixelRect, code: DetectedCode, inBand: List<TextLine>): PixelRect {
+        if (inBand.isEmpty()) return band
+        val lineHeight = median(inBand.map { it.bottom - it.top }).coerceAtLeast(1)
+        val firstAllowance = (lineHeight * 1.5f).toInt()
+
+        // 바코드에 가장 가까운 줄(상품명·유효기간)은 떨어져 있어도 반드시 포함한다. 글자를 잃는 쪽이 더 나쁘다.
+        var top = code.top
+        var widest = 0
+        var kept = 0
+        for (line in inBand.filter { it.top < code.top }.sortedByDescending { it.bottom }) {
+            val gap = (top - line.bottom).coerceAtLeast(0)
+            if (kept > 0 && gap >= maxOf(firstAllowance, widest * 2)) break
+            widest = maxOf(widest, gap)
+            top = minOf(top, line.top)
+            kept++
+        }
+
+        var bottom = code.bottom
+        widest = 0
+        kept = 0
+        for (line in inBand.filter { it.bottom > code.bottom }.sortedBy { it.top }) {
+            val gap = (line.top - bottom).coerceAtLeast(0)
+            if (kept > 0 && gap >= maxOf(firstAllowance, widest * 2)) break
+            widest = maxOf(widest, gap)
+            bottom = maxOf(bottom, line.bottom)
+            kept++
+        }
+
+        return PixelRect(
+            band.left,
+            (top - lineHeight).coerceAtLeast(band.top),
+            band.right,
+            (bottom + lineHeight).coerceAtMost(band.bottom),
+        )
     }
 
     private fun median(values: List<Int>): Int {
