@@ -46,15 +46,17 @@ class MultiCouponImportTest {
             assertEquals("번호는 모두 달라야 한다", 5, coupons.mapNotNull { it.codeValue }.distinct().size)
             assertTrue("쿠폰마다 원본 안의 제 영역을 가리킨다", coupons.all { it.crop != null })
             assertEquals("원본은 장수만큼만", files.size, coupons.mapNotNull { it.assetId }.distinct().size)
+            var exactTitles = 0
             coupons.forEachIndexed { index, coupon ->
                 assertEquals(LocalDate.of(2026, 12, 21), coupon.expiryDate)
                 assertEquals("slice=$index crop=${coupon.crop}", "메가MGC커피", coupon.merchantName)
-                // OCR이 상품명의 글자를 하나씩 틀리게 읽을 수 있어(골든애플→골든매플, 메가MGC커피→메가MGC커파)
-                // 읽은 그대로 저장한다. 여기서는 칸마다 제 상품명이 붙었는지만 확인한다.
-                assertTrue("상품명: ${coupon.title}", coupon.title.endsWith("블랙티") && coupon.title.length >= 10)
+                val exactTitle = coupon.title.replace(Regex("\\s+"), "") == "메가MGC커피저당골든애플블랙티"
+                if (exactTitle) exactTitles++
+                assertTrue("잘못 읽은 상품명을 확정하지 않는다", exactTitle || coupon.needsReview)
                 val recognizedAgain = importer.recognizeText(coupon.originalAssetPath!!, coupon.crop)
                 assertEquals("재인식은 slice=$index 영역 밖의 날짜를 읽으면 안 된다", coupon.expiryDate, recognizedAgain.expiryDate)
             }
+            android.util.Log.i("CouponCorpus", "multi total=5 exactTitles=$exactTitles mismatchesRoutedToReview=${5 - exactTitles}")
 
             // 같은 화면을 다시 담아도 쿠폰이 늘지 않는다.
             val again = files.map { file -> importer.import(publish(file).also(uris::add)) }

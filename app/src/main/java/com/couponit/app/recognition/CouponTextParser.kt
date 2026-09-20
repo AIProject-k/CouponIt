@@ -7,7 +7,13 @@ data class CouponTextFields(
     val merchantName: String? = null,
     val expiryDate: LocalDate? = null,
     val expiryConfirmed: Boolean = false,
-)
+    val evidence: Map<String, List<TextLine>> = emptyMap(),
+    val reviewReasons: List<String> = emptyList(),
+    val retried: Boolean = false,
+    val conflicts: Set<String> = emptySet(),
+) {
+    val needsReview: Boolean get() = title == null || merchantName == null || !expiryConfirmed || reviewReasons.isNotEmpty()
+}
 
 object CouponTextParser {
     private fun label(vararg names: String) = Regex(
@@ -79,7 +85,8 @@ object CouponTextParser {
             }
         }
         val expiry = expiryCandidates.distinct().singleOrNull()?.takeUnless { ambiguous }
-        return CouponTextFields(title, merchant, expiry, expiry != null)
+        return CouponTextFields(title, merchant, expiry, expiry != null,
+            conflicts = if (ambiguous || expiryCandidates.distinct().size > 1) setOf("expiry") else emptySet())
     }
 
     private fun toDate(match: MatchResult): LocalDate? = runCatching {

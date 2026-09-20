@@ -144,6 +144,8 @@ class CouponOcrIntegrationTest {
             compose.onNodeWithText("상품명").assertTextContains("직접 입력한 상품")
             compose.onNodeWithText("사용처", substring = false).assertTextContains("스타벅스")
             assertNull(runBlocking { repository.coupon(coupon.id) }!!.merchantName)
+            compose.onNodeWithText("상품명 원문 보기").performScrollTo().performClick()
+            compose.onNodeWithText("쿠폰 전체 영역 보기").performScrollTo().performClick()
             compose.onNodeWithText("정보 저장").performScrollTo().performClick()
             compose.waitUntil(10_000) { runBlocking { repository.coupon(coupon.id) }?.merchantName == "스타벅스" }
             val saved = runBlocking { repository.coupon(coupon.id) }!!

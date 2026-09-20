@@ -223,6 +223,7 @@ private fun CouponInfo(coupon: Coupon, modifier: Modifier) {
         Text(coupon.merchantName ?: "사용처 미확인", fontSize = 11.sp, color = Muted)
         Text(coupon.title, fontSize = 14.sp, fontWeight = FontWeight.SemiBold, maxLines = 2, overflow = TextOverflow.Ellipsis)
         Spacer(Modifier.height(6.dp)); Text(expiryLabel(coupon), fontSize = 10.sp, color = if (coupon.expiryConfirmed) Warning else Muted)
+        if (coupon.needsReview) Text("인식 결과 확인 필요", fontSize = 10.sp, color = Warning)
     }
 }
 
@@ -241,6 +242,8 @@ private fun DetailScreen(coupon: Coupon, screen: WalletScreen.Detail, model: Wal
     var expiry by remember(coupon.id) { mutableStateOf(coupon.expiryDate?.toString().orEmpty()) }
     var type by remember(coupon.id) { mutableStateOf(coupon.type) }
     var recognizing by remember(coupon.id) { mutableStateOf(false) }
+    var recognition by remember(coupon.id) { mutableStateOf<com.couponit.app.recognition.CouponTextFields?>(null) }
+    var evidenceRegion by remember(coupon.id) { mutableStateOf<PixelRect?>(null) }
     var issuerName by remember(coupon.id) { mutableStateOf(IssuerLookup.byName(coupon.issuerName)?.name) }
     val suggestedIssuer = IssuerLookup.suggest(merchant)
     val issuer = IssuerLookup.byName(issuerName) ?: suggestedIssuer
@@ -266,12 +269,14 @@ private fun DetailScreen(coupon: Coupon, screen: WalletScreen.Detail, model: Wal
             }
         }
         Spacer(Modifier.height(16.dp))
-        OriginalImage(coupon.originalAssetPath, coupon.crop, Modifier.fillMaxWidth().height(230.dp))
+        OriginalImage(coupon.originalAssetPath, evidenceRegion ?: coupon.crop, Modifier.fillMaxWidth().height(230.dp))
+        if (evidenceRegion != null) TextButton({ evidenceRegion = null }) { Text("쿠폰 전체 영역 보기") }
         OutlinedButton({
             recognizing = true
             scope.launch {
                 try {
                     model.recognizeDetails(coupon)?.let { fields ->
+                        recognition = fields
                         if (title.isBlank() || title == "이름 미확인") title = fields.title.orEmpty()
                         if (merchant.isBlank()) merchant = fields.merchantName.orEmpty()
                         if (expiry.isBlank()) expiry = fields.expiryDate?.toString().orEmpty()
@@ -280,6 +285,19 @@ private fun DetailScreen(coupon: Coupon, screen: WalletScreen.Detail, model: Wal
             }
         }, Modifier.fillMaxWidth(), enabled = !recognizing && coupon.originalAssetPath != null) {
             Text(if (recognizing) "글자 인식 중…" else "이미지에서 정보 다시 인식")
+        }
+        recognition?.let { result ->
+            Text("빈 항목에 인식 결과를 채웠어요. 원문을 확인한 뒤 저장해 주세요.", color = Muted, fontSize = 12.sp)
+            if (result.retried) Text("누락된 정보를 영역 확대 인식으로 다시 확인했어요.", color = Muted, fontSize = 11.sp)
+            result.reviewReasons.forEach { reason -> Text(reason, color = Warning, fontSize = 12.sp) }
+            result.evidence.forEach { (field, lines) ->
+                if (lines.isNotEmpty()) TextButton({
+                    evidenceRegion = PixelRect(lines.minOf { it.left } - 12, lines.minOf { it.top } - 12,
+                        lines.maxOf { it.right } + 12, lines.maxOf { it.bottom } + 12)
+                }) {
+                    Text(when (field) { "title" -> "상품명 원문 보기"; "merchant" -> "사용처 원문 보기"; else -> "종료일 원문 보기" })
+                }
+            }
         }
         Text("재인식은 빈 항목만 채웁니다. 원본과 비교한 뒤 저장해 주세요.", color = Muted, fontSize = 11.sp)
         Spacer(Modifier.height(12.dp))

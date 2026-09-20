@@ -4,10 +4,10 @@
 
 현재 저장소는 v2.0 기획(`CouponIt_자체쿠폰지갑_상세기획_개발계획_v2.0.md`)의 P0/P1 범위를 네이티브 Android로
 구현한 개발 검증 단계입니다. 서버나 계정 없이 앱 전용 저장소와 Room만 사용합니다. 최신 배포는
-[v0.1.4](https://github.com/AIProject-k/CouponIt/releases/tag/v0.1.4) — 자세한 변경 내역은 [CHANGELOG.md](CHANGELOG.md).
+[v0.1.5](https://github.com/AIProject-k/CouponIt/releases/tag/v0.1.5) — 자세한 변경 내역은 [CHANGELOG.md](CHANGELOG.md).
 
-빌드 없이 바로 써보려면 [릴리스 페이지](https://github.com/AIProject-k/CouponIt/releases/tag/v0.1.4)에서
-`CouponIt-v0.1.4-debug.apk`를 내려받아 설치하세요. 디버그 서명이라 배포용이 아니고, 다른 서명으로 이미
+빌드 없이 바로 써보려면 [릴리스 페이지](https://github.com/AIProject-k/CouponIt/releases/tag/v0.1.5)에서
+`CouponIt-v0.1.5-debug.apk`를 내려받아 설치하세요. 디버그 서명이라 배포용이 아니고, 다른 서명으로 이미
 설치돼 있으면 먼저 지우고 설치해야 합니다.
 
 ## 요구 사항
@@ -33,6 +33,8 @@ $env:JAVA_HOME = "C:\Program Files\Zulu\zulu-21"   # 위 이슈 회피용, 필�
 - 앱 전용 원본 사본·해시·Room 데이터 저장
 - ML Kit 바코드 후보 검출과 원본 영역 제시
 - 번들 한국어 OCR로 상품명·사용처·유효기간 자동 입력, 상세 화면에서 빈 항목 재인식
+- 글자 좌표로 필드 추출: 사전에 없는 브랜드도 문맥으로 읽고, 여러 줄 상품명을 이어 붙임
+- 인식이 불확실하면 그 영역만 확대해 다시 읽고, 두 결과가 다르면 확정하지 않고 **인식 결과 확인 필요**로 표시
 - 상세 화면에서 발행사 선택 후 사용 여부 조회 페이지 열기(쿠폰 번호 복사)
 - 홈 요약·검색·사용처 필터·임박순·2열/목록
 - 상세 편집·보관함·교환권/금액권 사용 기록
@@ -60,7 +62,8 @@ app/src/main/java/com/couponit/app/
   data/          Room 엔티티·DAO·Repository
   domain/        Coupon·UsageEvent 등 도메인 모델, 지갑 규칙(WalletRules), 발행사 조회 목록(IssuerLookup)
   importing/     이미지 가져오기 정책과 파이프라인(CouponImporter)
-  recognition/   바코드(BarcodeRecognizer)·한국어 OCR(CouponTextRecognizer/Parser)·쿠폰 칸 분리(CouponSplitter)
+  recognition/   바코드(BarcodeRecognizer)·한국어 OCR(CouponTextRecognizer/Parser)
+                 쿠폰 칸 분리(CouponSplitter)·좌표 기반 필드 추출(CouponLayoutParser)
   ui/            Compose 화면(CouponItApp)과 WalletViewModel
 docs/
   verification/  실행 근거를 코드 변경과 분리해 기록 (P0/P1, OCR)

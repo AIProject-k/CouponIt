@@ -116,10 +116,7 @@ class WalletViewModel(
     suspend fun recognizeDetails(coupon: Coupon): CouponTextFields? {
         val path = coupon.originalAssetPath ?: return null
         return try {
-            importer.recognizeText(path, coupon.crop).also {
-                message.value = if (it == CouponTextFields()) "인식 가능한 정보를 찾지 못했어요. 원본을 보고 직접 입력해 주세요."
-                else "빈 항목에 인식 결과를 채웠어요. 원본과 비교한 뒤 저장해 주세요."
-            }
+            importer.recognizeText(path, coupon.crop)
         } catch (error: CancellationException) {
             throw error
         } catch (_: Exception) {

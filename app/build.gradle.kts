@@ -13,8 +13,8 @@ android {
         applicationId = "com.couponit.app"
         minSdk = 30
         targetSdk = 36
-        versionCode = 5
-        versionName = "0.1.4"
+        versionCode = 6
+        versionName = "0.1.5"
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
 
@@ -36,6 +36,8 @@ android {
 
 dependencies {
     implementation("androidx.core:core-ktx:1.17.0")
+    // 회전 정보 읽기. android.media.ExifInterface는 지원 포맷이 좁아 권장되지 않는다.
+    implementation("androidx.exifinterface:exifinterface:1.4.1")
     implementation("androidx.activity:activity-compose:1.10.1")
     implementation("androidx.lifecycle:lifecycle-runtime-compose:2.9.2")
     implementation("androidx.lifecycle:lifecycle-viewmodel-compose:2.9.2")

@@ -13,7 +13,6 @@ import com.couponit.app.domain.PixelRect
 import com.couponit.app.recognition.BarcodeRecognizer
 import com.couponit.app.recognition.CouponSlice
 import com.couponit.app.recognition.CouponTextFields
-import com.couponit.app.recognition.CouponTextParser
 import com.couponit.app.recognition.CouponTextRecognizer
 import com.couponit.app.recognition.CouponSplitter
 import com.couponit.app.recognition.TextLine
@@ -127,12 +126,12 @@ class CouponImporter(
     }
 
     /** 바코드를 찾지 못한 이미지. 통째로 한 개의 쿠폰으로 두고 사람이 확인한다. */
-    private fun prepareWholeImage(
+    private suspend fun prepareWholeImage(
         destination: File,
         assetId: String,
         lines: List<TextLine>,
     ): List<ImportCoupon> {
-        val fields = CouponTextParser.parse(lines.joinToString("\n") { it.text })
+        val fields = textRecognizer.recognize(destination, initialLines = lines)
         val coupon = Coupon(
             id = UUID.randomUUID().toString(),
             title = fields.title ?: "정보 확인 필요",
@@ -147,14 +146,14 @@ class CouponImporter(
         return listOf(ImportCoupon(coupon, emptyList()))
     }
 
-    private fun prepareSlices(
+    private suspend fun prepareSlices(
         destination: File,
         assetId: String,
         slices: List<CouponSlice>,
     ): List<ImportCoupon> = slices.map { slice ->
-        val fields = CouponTextParser.parse(slice.text)
+        val fields = textRecognizer.recognize(destination, slice.region, slice.lines, slice.code)
         val couponId = UUID.randomUUID().toString()
-        val needsReview = slice.uncertain || fields.title == null || fields.merchantName == null || !fields.expiryConfirmed
+        val needsReview = slice.uncertain || fields.needsReview
         val coupon = Coupon(
             id = couponId,
             title = fields.title ?: "정보 확인 필요",
